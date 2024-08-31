@@ -3,23 +3,6 @@
 const float DECIMAL_STEP = 0.1f;
 Random random = new Random();
 
-float currentWeight = 0f;
-while (true)
-{
-    float.TryParse(Console.ReadLine(), out var goalWeight);
-    var steps = CalcStepsForNextWeightGoal(goalWeight, currentWeight);
-
-    foreach(var step in steps)
-    {
-        Console.WriteLine($"{step:0.0}");
-    }
-
-    currentWeight = goalWeight;
-    Console.WriteLine();
-}
-
-
-
 // SERIAL
 
 Console.WriteLine("Select the Serial port you want to connect:");
@@ -59,7 +42,7 @@ if (!int.TryParse(Console.ReadLine(), out int selectedBaudRateIndex) || selected
 var selectedbaudRate = baudRates[selectedBaudRateIndex];
 using SerialPort serialPort = new SerialPort(selectedPort)
 {
-    BaudRate = selectedbaudRate, 
+    BaudRate = selectedbaudRate,
     DataBits = 7,
     Parity = Parity.Even,
     StopBits = StopBits.Two,
@@ -73,8 +56,13 @@ try
     serialPort.Open();
     Console.WriteLine($"Connected to {selectedPort}. Sending data... Press 'Ctrl+C' to stop.");
 
-    string message = "0000.0EL";
+    float currentWeight = 0.0f;
+
+    string message = $"{currentWeight:0000.0}EL";
     string sobre = "E61EE";
+
+    Queue<float> weightQueue = new Queue<float>();
+
     CancellationTokenSource cts = new CancellationTokenSource();
 
     // Start sending data in a separate thread
@@ -82,8 +70,19 @@ try
     {
         while (!cts.Token.IsCancellationRequested)
         {
+            if (weightQueue.Count > 0)
+            {
+                currentWeight = weightQueue.Dequeue();
+                message = $"{currentWeight:0000.0}OL";
+            }
+            else
+            {
+                message = $"{currentWeight:0000.0}EL";
+            }
+
             serialPort.WriteLine(message);
-            Thread.Sleep(1000); // Adjust the delay as needed
+            Console.WriteLine(message);
+            Thread.Sleep(50);
         }
     });
 
@@ -101,12 +100,20 @@ try
     // Keep the main thread alive to keep sending data
     while (!cts.Token.IsCancellationRequested)
     {
-        Thread.Sleep(500);
+        Console.Write("\nNext weight goal: ");
+
+        float.TryParse(Console.ReadLine(), out var weightGoal);
+        var steps = CalcStepsForNextWeightGoal(weightGoal, currentWeight);
+        Array.ForEach(steps, weightQueue.Enqueue);
     }
 }
 catch (Exception ex)
 {
     Console.WriteLine($"Error: {ex.Message}");
+}
+finally
+{
+    serialPort.Close();
 }
 
 float[] CalcStepsForNextWeightGoal(float weightGoal, float currentWeight)
