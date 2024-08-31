@@ -20,9 +20,6 @@ while (true)
 
 
 
-
-return;
-
 // SERIAL
 
 Console.WriteLine("Select the Serial port you want to connect:");
