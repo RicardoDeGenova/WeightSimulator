@@ -47,19 +47,18 @@ using SerialPort serialPort = new SerialPort(selectedPort)
     Parity = Parity.Even,
     StopBits = StopBits.Two,
     Handshake = Handshake.None,
-    DtrEnable = true, // Some devices need Data Terminal Ready (DTR) enabled
-    RtsEnable = true  // Some devices need Request to Send (RTS) enabled
 };
 
 try
 {
     serialPort.Open();
     Console.WriteLine($"Connected to {selectedPort}. Sending data... Press 'Ctrl+C' to stop.");
-
+    serialPort.WriteLine("000000");
     float currentWeight = 0.0f;
 
     string message = $"{currentWeight:0000.0}EL";
     string sobre = "E61EE";
+    bool isSobre = false;
 
     Queue<float> weightQueue = new Queue<float>();
 
@@ -75,17 +74,21 @@ try
                 currentWeight = weightQueue.Dequeue();
                 message = $"{currentWeight:0000.0}OL";
             }
+            else if (isSobre)
+            {
+                message = sobre;
+            }
             else
             {
                 message = $"{currentWeight:0000.0}EL";
             }
 
-            serialPort.WriteLine(message);
-            Console.WriteLine(message);
-            Thread.Sleep(50);
+            serialPort.Write(message + "\r\n");
+            //Console.WriteLine(message);
+            Thread.Sleep(30);
         }
     });
-
+    
     sendDataThread.Start();
 
     // Wait for Ctrl+C or any other termination signal
@@ -102,9 +105,17 @@ try
     {
         Console.Write("\nNext weight goal: ");
 
-        float.TryParse(Console.ReadLine(), out var weightGoal);
-        var steps = CalcStepsForNextWeightGoal(weightGoal, currentWeight);
-        Array.ForEach(steps, weightQueue.Enqueue);
+        var sucess = float.TryParse(Console.ReadLine(), out var weightGoal);
+        if (sucess)
+        {
+            var steps = CalcStepsForNextWeightGoal(weightGoal, currentWeight);
+            Array.ForEach(steps, weightQueue.Enqueue);
+            isSobre = false;
+        }
+        else
+        {
+            isSobre = true;
+        }
     }
 }
 catch (Exception ex)
@@ -130,9 +141,9 @@ float[] CalcStepsForNextWeightGoal(float weightGoal, float currentWeight)
 
     var diff = weightGoal - currentWeight;
 
-    var diffToCalc = diff * 0.8 == 0 ? 1 : diff * 0.8; //80% so we dont have too many steps
-    int steps = Math.Abs(Convert.ToInt32((int)double.Ceiling(diffToCalc / DECIMAL_STEP)));
+    int steps = Math.Abs(Convert.ToInt32((int)double.Ceiling(diff / DECIMAL_STEP)));
     int fractionedSteps = random.Next((int)double.Ceiling(steps / 10), steps);
+    fractionedSteps = Math.Min(fractionedSteps, 25);
     if (fractionedSteps <= 0) fractionedSteps = 1;
 
     int stepsToIncrementPerIteration = steps / fractionedSteps;
