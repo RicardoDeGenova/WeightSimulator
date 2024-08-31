@@ -3,26 +3,6 @@
 const float DECIMAL_STEP = 0.1f;
 Random random = new Random();
 
-float currentWeight = 0f;
-while (true)
-{
-    float.TryParse(Console.ReadLine(), out var goalWeight);
-    var steps = CalcStepsForNextWeightGoal(goalWeight, currentWeight);
-
-    foreach(var step in steps)
-    {
-        Console.WriteLine($"{step:0.0}");
-    }
-
-    currentWeight = goalWeight;
-    Console.WriteLine();
-}
-
-
-
-
-return;
-
 // SERIAL
 
 Console.WriteLine("Select the Serial port you want to connect:");
@@ -62,22 +42,26 @@ if (!int.TryParse(Console.ReadLine(), out int selectedBaudRateIndex) || selected
 var selectedbaudRate = baudRates[selectedBaudRateIndex];
 using SerialPort serialPort = new SerialPort(selectedPort)
 {
-    BaudRate = selectedbaudRate, 
+    BaudRate = selectedbaudRate,
     DataBits = 7,
     Parity = Parity.Even,
     StopBits = StopBits.Two,
     Handshake = Handshake.None,
-    DtrEnable = true, // Some devices need Data Terminal Ready (DTR) enabled
-    RtsEnable = true  // Some devices need Request to Send (RTS) enabled
 };
 
 try
 {
     serialPort.Open();
     Console.WriteLine($"Connected to {selectedPort}. Sending data... Press 'Ctrl+C' to stop.");
+    serialPort.WriteLine("000000");
+    float currentWeight = 0.0f;
 
-    string message = "0000.0EL";
+    string message = $"{currentWeight:0000.0}EL";
     string sobre = "E61EE";
+    bool isSobre = false;
+
+    Queue<float> weightQueue = new Queue<float>();
+
     CancellationTokenSource cts = new CancellationTokenSource();
 
     // Start sending data in a separate thread
@@ -85,11 +69,26 @@ try
     {
         while (!cts.Token.IsCancellationRequested)
         {
-            serialPort.WriteLine(message);
-            Thread.Sleep(1000); // Adjust the delay as needed
+            if (weightQueue.Count > 0)
+            {
+                currentWeight = weightQueue.Dequeue();
+                message = $"{currentWeight:0000.0}OL";
+            }
+            else if (isSobre)
+            {
+                message = sobre;
+            }
+            else
+            {
+                message = $"{currentWeight:0000.0}EL";
+            }
+
+            serialPort.Write(message + "\r\n");
+            //Console.WriteLine(message);
+            Thread.Sleep(30);
         }
     });
-
+    
     sendDataThread.Start();
 
     // Wait for Ctrl+C or any other termination signal
@@ -104,12 +103,28 @@ try
     // Keep the main thread alive to keep sending data
     while (!cts.Token.IsCancellationRequested)
     {
-        Thread.Sleep(500);
+        Console.Write("\nNext weight goal: ");
+
+        var sucess = float.TryParse(Console.ReadLine(), out var weightGoal);
+        if (sucess)
+        {
+            var steps = CalcStepsForNextWeightGoal(weightGoal, currentWeight);
+            Array.ForEach(steps, weightQueue.Enqueue);
+            isSobre = false;
+        }
+        else
+        {
+            isSobre = true;
+        }
     }
 }
 catch (Exception ex)
 {
     Console.WriteLine($"Error: {ex.Message}");
+}
+finally
+{
+    serialPort.Close();
 }
 
 float[] CalcStepsForNextWeightGoal(float weightGoal, float currentWeight)
@@ -126,9 +141,9 @@ float[] CalcStepsForNextWeightGoal(float weightGoal, float currentWeight)
 
     var diff = weightGoal - currentWeight;
 
-    var diffToCalc = diff * 0.8 == 0 ? 1 : diff * 0.8; //80% so we dont have too many steps
-    int steps = Math.Abs(Convert.ToInt32((int)double.Ceiling(diffToCalc / DECIMAL_STEP)));
+    int steps = Math.Abs(Convert.ToInt32((int)double.Ceiling(diff / DECIMAL_STEP)));
     int fractionedSteps = random.Next((int)double.Ceiling(steps / 10), steps);
+    fractionedSteps = Math.Min(fractionedSteps, 25);
     if (fractionedSteps <= 0) fractionedSteps = 1;
 
     int stepsToIncrementPerIteration = steps / fractionedSteps;
