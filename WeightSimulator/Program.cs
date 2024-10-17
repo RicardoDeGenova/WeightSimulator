@@ -56,8 +56,9 @@ try
     serialPort.WriteLine("000000");
     float currentWeight = 0.0f;
 
-    string message = $"{currentWeight:0000.0}EL";
-    string sobre = "E61EE";
+    string message = $"PB: {currentWeight:0000.0}kg PL: {currentWeight:0000.0}kg T:0.0kg";
+    string oldMessage = string.Empty;
+    string sobre = "SOBRE";
     bool isSobre = false;
 
     Queue<float> weightQueue = new Queue<float>();
@@ -71,8 +72,9 @@ try
         {
             if (weightQueue.Count > 0)
             {
+                //$"PB: XXXXXXkg PL: YYYYYYkg T:ZZZZZZkg"
                 currentWeight = weightQueue.Dequeue();
-                message = $"{currentWeight:0000.0}OL";
+                message = $"PB: {currentWeight:0000.0}kg PL: {currentWeight:0000.0}kg T:1.0kg";
             }
             else if (isSobre)
             {
@@ -80,11 +82,17 @@ try
             }
             else
             {
-                message = $"{currentWeight:0000.0}EL";
+                message = $"PB: {currentWeight:0000.0}kg PL: {currentWeight:0000.0}kg T:1.0kg";
             }
+            message = message.Replace(".", ",");
 
             serialPort.Write(message + "\r\n");
-            //Console.WriteLine(message);
+
+            if (message != oldMessage)
+            {
+                Console.WriteLine(message);
+                oldMessage = message;
+            }
             Thread.Sleep(30);
         }
     });
@@ -103,8 +111,6 @@ try
     // Keep the main thread alive to keep sending data
     while (!cts.Token.IsCancellationRequested)
     {
-        Console.Write("\nNext weight goal: ");
-
         var sucess = float.TryParse(Console.ReadLine(), out var weightGoal);
         if (sucess)
         {
@@ -116,6 +122,8 @@ try
         {
             isSobre = true;
         }
+
+        Console.Write("\nNext weight goal: ");
     }
 }
 catch (Exception ex)
